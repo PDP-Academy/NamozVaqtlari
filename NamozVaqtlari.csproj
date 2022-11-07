@@ -10,4 +10,8 @@
     <PackageReference Include="Telegram.Bot" Version="18.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PDP darslari - C# bootcamp\3-modul\TelegramBot\TelegramBot\TelegramBot.csproj" />
+  </ItemGroup>
+
 </Project>

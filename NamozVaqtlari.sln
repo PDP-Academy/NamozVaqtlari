@@ -5,6 +5,8 @@ VisualStudioVersion = 17.3.32825.248
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NamozVaqtlari", "NamozVaqtlari.csproj", "{966724BB-FBD4-44C8-9B82-ACAD4965F6D5}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramBot", "..\PDP darslari - C# bootcamp\3-modul\TelegramBot\TelegramBot\TelegramBot.csproj", "{D93F58EA-B4D7-44DC-AA9E-A1D6F13AECF9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{966724BB-FBD4-44C8-9B82-ACAD4965F6D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{966724BB-FBD4-44C8-9B82-ACAD4965F6D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{966724BB-FBD4-44C8-9B82-ACAD4965F6D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D93F58EA-B4D7-44DC-AA9E-A1D6F13AECF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D93F58EA-B4D7-44DC-AA9E-A1D6F13AECF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D93F58EA-B4D7-44DC-AA9E-A1D6F13AECF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D93F58EA-B4D7-44DC-AA9E-A1D6F13AECF9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

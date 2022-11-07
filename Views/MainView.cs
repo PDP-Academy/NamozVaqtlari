@@ -1,159 +1,214 @@
 ﻿using NamozVaqtlari.Extensions;
 using NamozVaqtlari.Services.PrayerTime;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
+using TelegramBot;
+using TelegramBot.Core;
+
 
 namespace NamozVaqtlari.Views;
 
 public class MainView
 {
-    #region Constants
-    private const int OPTION_DAILY = 0;
-	private const int OPTION_WEEKLY = 1;
-	private const int OPTION_MONTHLY = 2;
-	private string[] Regions = { "Toshkent", "Andijon", "Namangan", "Qo'qon", "Jizzax", "Xiva", "Termiz", "Samarqand", };
-	private string[] Options = { "Kunlik", "Haftalik", "Oylik" };
-    #endregion
+    private const string TOKEN = "1840796662:AAHeCquOT3iDWQt_2ObHzXVZmbX4MAIRXkg";
+    private Dictionary<long, short> users = new Dictionary<long, short>();
+    private List<string> regions = new List<string>() { "Toshkent", "Andijon" };
+    private List<string> timeOptions = new() { "Kunlik", "Haftalik", "Oylik" };
+    private List<string> WeekNames = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.DayNames.ToList<string>();
+    private List<string> MonthNames = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.MonthNames.ToList<string>();
 
-    #region Ctor
-    private readonly IPrayerTimeService prayerTimeService;
 
-	public MainView(IPrayerTimeService prayerTimeService)
-	{
-		this.prayerTimeService = prayerTimeService;
-    }
-    #endregion
+    private IPrayerTimeService prayerTimeService;
 
-    #region Commands
-    public async Task StartCommandAsync(
-		ITelegramBotClient botClient,
-		long chatId,
-		int messageId)
-	{
-		var regions = Program.regions;
-
-		if(!regions.ContainsKey(chatId))
-		{
-			await SendRegionsAsync(botClient, chatId);
-		}
-		else
-		{
-            await SendOptionsAsync(botClient, chatId, messageId);
-        }
-	}
-
-	public async Task SendRegionsAsync(
-		ITelegramBotClient botClient,
-		long chatId)
-	{
-		var callbackDatas = GenerateCallbackData(Regions, "region");
-		var markup = MarkupExtensions.GenerateButtons(callbackDatas);
-
-		await botClient.SendTextMessageAsync(
-			chatId: chatId,
-			text: "Quyidagilardan birini tanlang:",
-			replyMarkup: markup);
-	}
-
-	public async Task SendOptionsAsync(
-		ITelegramBotClient botClient,
-		long chatId,
-		int messageId,
-		bool isCallback = false)
+    public MainView(IPrayerTimeService prayerTimeService)
     {
-		var callbackDatas = GenerateCallbackData(Options, "option");
-        var markup = MarkupExtensions.GenerateButtons(callbackDatas);
+        this.prayerTimeService = prayerTimeService;
+    }
 
-		if(isCallback)
-		{
-            await botClient.EditMessageTextAsync(
-                chatId: chatId,
-				text: "Quyidagilardan birini tanlang:",
-                messageId: messageId,
-                replyMarkup: markup);
+    public void Start()
+    {
+        TelegramBot.Core.TelegramBot bot = new TelegramBot.Core.TelegramBot(TOKEN, HandlePollingErrorAsync);
+
+        bot.Hears("salom", async ctx =>
+        {
+            await ctx.ReplyWithHTML("Salom");
+        });
+
+        //Start command handling
+        bot.Start(async ctx =>
+        {
+            await StartAction(ctx);
+        });
+
+
+        bot.Action("GoToStart", this.StartAction);
+
+
+
+
+
+        //Actions
+        bot.CallbackData(async ctx =>
+        {
+            if (ctx.CallbackQuery.Data.StartsWith("SetOption"))
+            {
+                int index = int.Parse(ctx.CallbackQuery.Data.Split("#")[1]);
+                if (index == 0)
+                    await SendDaily(ctx);
+                else if (index == 1)
+                    await sendWeekly(ctx, ((int)DateTime.Now.DayOfWeek));
+                else if (index == 2)
+                    await sendMonthly(ctx);
+
+            }
+            else if (ctx.CallbackQuery.Data.StartsWith("SetRegion"))
+            {
+                if (this.users.ContainsKey(ctx.CallbackQuery.From.Id))
+                    this.users[ctx.CallbackQuery.From.Id] = short.Parse(ctx.CallbackQuery.Data.Split("#")[1]);
+                else
+                    this.users.Add(ctx.CallbackQuery.From.Id, short.Parse(ctx.CallbackQuery.Data.Split("#")[1]));
+                await this.ReplyWithOptions(ctx);
+            }
+            else if (ctx.CallbackQuery.Data.StartsWith("WeekDayIndex"))
+            {
+                int dayIndex = int.Parse(ctx.CallbackQuery.Data.Split("#")[1]);
+                if (dayIndex < 0 || dayIndex >= this.WeekNames.Count)
+                {
+                    await ctx.Client.AnswerCallbackQueryAsync(ctx.CallbackQuery.Id, "Noto'g'ri tanlov!");
+                    return;
+                };
+                await this.sendWeekly(ctx, dayIndex);
+            }
+            else if (ctx.CallbackQuery.Data.StartsWith("MonthIndex"))
+            {
+                int monthIndex = int.Parse(ctx.CallbackQuery.Data.Split("#")[1]);
+                if (monthIndex < 0 || monthIndex >= this.MonthNames.Count)
+                {
+                    await ctx.Client.AnswerCallbackQueryAsync(ctx.CallbackQuery.Id, "Noto'g'ri tanlov!");
+                    return;
+                };
+                await this.sendMonthly(ctx, monthIndex);
+            }
+        });
+
+
+
+
+        try
+        {
+            bot.Launch();
         }
-		else
-		{
-            await botClient.SendTextMessageAsync(
-                chatId: chatId,
-				text: "Quyidagilardan birini tanlang",
-                replyMarkup: markup);
+        catch (Exception)
+        {
+
+            throw;
         }
     }
 
-	public async Task SendPrayerTimeAsync(
-		ITelegramBotClient botClient,
-		long chatId,
-		int messageId,
-		int option)
-	{
-		var regions = Program.regions;
-		var isParsed = regions.TryGetValue(chatId, out short region);
-
-		if (!isParsed)
-			return;
-
-		var task = option switch
-		{
-			OPTION_DAILY => SendDailyPrayerTimes(),
-			OPTION_WEEKLY => SendWeeklyPrayerTimes(),
-			OPTION_MONTHLY => SendMonthlyPrayerTimes(),
-			_ => throw new InvalidOperationException()
-		};
-
-		await task;
-
-		async Task SendDailyPrayerTimes()
-		{
-			var prayerTime = await this.prayerTimeService
-				.RetrieveDailyPrayerTimeAsync(Regions[region]);
-
-			await botClient.EditMessageTextAsync(
-				chatId: chatId,
-				messageId: messageId,
-				text: prayerTime.ToString());
-		}
-
-		async Task SendWeeklyPrayerTimes()
-		{
-            var prayerTimeList = await this.prayerTimeService
-				.RetrieveWeeklyPrayerTimeListAsync(Regions[region]);
-
-			var messageText = string.Join("\n", prayerTimeList);
-
-            await botClient.EditMessageTextAsync(
-                chatId: chatId,
-				messageId: messageId,
-                text: messageText);
+    private async Task StartAction(IContext ctx)
+    {
+        if (this.users.ContainsKey(ctx.From.Id) || this.users.ContainsKey(ctx.Chat.Id))
+        {
+            await this.ReplyWithOptions(ctx);
+            return;
         }
+        var inlineButtons = new Markup.InlineKeyboardBuilder(regions.Count / 3 + 1);
+        foreach (var item in regions.Select((str, index) => (str, index)))
+            inlineButtons.AddButton(new(item.str) { CallbackData = $"SetRegion#{item.index}" });
+        if (ctx.CallbackQuery != null)
+            await ctx.Client.EditMessageTextAsync(ctx.Chat.Id, ctx.Message.MessageId, "<b>Assalomu alaykum Xush kelibsiz: </b>",
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyMarkup: inlineButtons.Build());
+        else
+            await ctx.ReplyWithHTML("<b>Assalomu alaykum Xush kelibsiz: </b>", new() { ReplyMarkup = inlineButtons.Build() });
 
-		async Task SendMonthlyPrayerTimes()
-		{
-            var prayerTimeList = await this.prayerTimeService
-                .RetrieveMonthlyPrayerTimeListAsync(Regions[region]);
 
-            var messageText = string.Join("\n", prayerTimeList);
+    }
 
-            await botClient.EditMessageTextAsync(
-                chatId: chatId,
-                messageId: messageId,
-                text: messageText);
+    private async Task sendMonthly(IContext ctx, int? monthIndex = null)
+    {
+        if (monthIndex == null)
+            monthIndex = DateTime.Now.Month;
+        var result = await this.prayerTimeService.RetrieveMonthlyPrayerTimeListAsync(this.regions[this.users[ctx.CallbackQuery.From.Id]], (int)monthIndex);
+        string s = "";
+        foreach (var item in result)
+            s += item.ToString() + "\n";
+
+        var ibutton = new Markup.InlineKeyboardBuilder()
+            .AddButton(new("Oldingi") { CallbackData = $"MonthIndex#{monthIndex - 1}" })
+            .AddButton(new("Bosh menyu") { CallbackData = $"GoToStart" })
+            .AddButton(new("Keyingi") { CallbackData = $"MonthIndex#{ monthIndex + 1}" });
+        await ctx.Client.EditMessageTextAsync(ctx.Chat.Id, ctx.CallbackQuery.Message.MessageId, $"<b>{this.MonthNames[(int)monthIndex]}\n{s.ToString()}</b>",
+            parseMode: Telegram.Bot.Types.Enums.ParseMode.Html,
+            replyMarkup: ibutton.Build()
+            );
+    }
+
+    private async Task sendWeekly(IContext ctx, int dayIndex = 0)
+    {
+        var result = await this.prayerTimeService.RetrieveWeeklyPrayerTimeListAsync(this.regions[this.users[ctx.CallbackQuery.From.Id]]);
+        var ibutton = new Markup.InlineKeyboardBuilder()
+            .AddButton(new("Oldingi") { CallbackData = $"WeekDayIndex#{dayIndex - 1}" })
+            .AddButton(new("Bosh menyu") { CallbackData = $"GoToStart" })
+            .AddButton(new("Keyingi") { CallbackData = $"WeekDayIndex#{ dayIndex + 1}" });
+        await ctx.Client.EditMessageTextAsync(ctx.Chat.Id, ctx.CallbackQuery.Message.MessageId, $"<b>{this.WeekNames[dayIndex]}\n{result[dayIndex].ToString()}</b>",
+            parseMode: Telegram.Bot.Types.Enums.ParseMode.Html,
+            replyMarkup: ibutton.Build()
+            );
+    }
+
+    private async Task SendDaily(IContext ctx)
+    {
+        if (!this.users.ContainsKey(ctx.CallbackQuery.From.Id))
+        {
+            await ctx.ReplyWithHTML("<b>So'rovingiz noto'g'ri yuborildi!</b>");
+            return;
         }
-	}
-    #endregion
+        try
+        {
+            var result = await this.prayerTimeService.RetrieveDailyPrayerTimeAsync(this.regions[this.users[ctx.CallbackQuery.From.Id]]);
 
-    #region Private methods
-    private IList<(string key, string value)> GenerateCallbackData(
-		string[] values,
-		string callBackData)
-	{
-		var datas = new List<(string key, string value)>();
+            await ctx.Client.EditMessageTextAsync(ctx.Chat.Id, ctx.CallbackQuery.Message.MessageId, @$"<b>Namoz vaqtlari: 
+Saharlik: {result.TongSaharlik};
+Quyosh chiqishi: {result.Quyosh};
+Peshin: {result.Peshin};
+Asr: {result.Asr};
+Shom: {result.Shom};
+Hufton: {result.Hufton};</b>", Telegram.Bot.Types.Enums.ParseMode.Html, replyMarkup: new Markup.InlineKeyboardBuilder().AddButton(new("Bosh menyu") { CallbackData = "GoToStart" }).Build());
+        }
+        catch (Exception ex)
+        {
+            await ctx.ReplyWithHTML($"<b>❌Xatolik:/n{ex.Message}</b>");
+        }
+    }
 
-		for (int i = 0; i < values.Length; i++)
-		{
-			datas.Add((values[i], $"{callBackData} {i}"));
-		}
+    private async Task ReplyWithOptions(IContext ctx)
+    {
+        var ibuttons = new Markup.InlineKeyboardBuilder();
+        foreach (var item in this.timeOptions.Select((x, index) => (x, index)))
+        {
+            ibuttons.AddButton(new(item.x) { CallbackData = $"SetOption#{item.index}" });
+        }
+        if (ctx.CallbackQuery != null)
+            await ctx.Client.EditMessageTextAsync(ctx.Chat.Id, ctx.CallbackQuery.Message.MessageId, "<b>Vaqtni tanglang: </b>", parseMode: Telegram.Bot.Types.Enums.ParseMode.Html, replyMarkup: ibuttons.Build());
+        else
+            await ctx.ReplyWithHTML("<b>Vaqtni tanglang: </b>", new() { ReplyMarkup = ibuttons.Build() });
+    }
 
-		return datas;
-	}
+    #region Error handling
+    static Task HandlePollingErrorAsync(
+         ITelegramBotClient botClient,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var ErrorMessage = exception switch
+        {
+            ApiRequestException apiRequestException
+                => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
+            _ => exception.ToString()
+        };
+
+        Console.WriteLine(ErrorMessage);
+        return Task.CompletedTask;
+    }
     #endregion
 }

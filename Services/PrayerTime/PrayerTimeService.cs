@@ -28,10 +28,10 @@ public class PrayerTimeService : IPrayerTimeService
         return payerTimesList.Select(prayerTimes => prayerTimes.Time).ToList();
     }
 
-    public async Task<IList<Time>> RetrieveMonthlyPrayerTimeListAsync(string region)
+    public async Task<IList<Time>> RetrieveMonthlyPrayerTimeListAsync(string region, int currentMonth)
     {
         var payerTimesList = await this.apiBroker
-            .GetMonthlyPrayerTimeListAsync(region);
+            .GetMonthlyPrayerTimeListAsync(region, currentMonth);
 
         return payerTimesList.Select(prayerTimes => prayerTimes.Time).ToList();
     }
