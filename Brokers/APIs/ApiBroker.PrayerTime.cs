@@ -24,9 +24,9 @@ public partial class ApiBroker : IApiBroker
         return JsonSerializer.Deserialize<IList<PrayerTime>>(content);
     }
 
-    public async Task<IList<PrayerTime>> GetMonthlyPrayerTimeListAsync(string region)
+    public async Task<IList<PrayerTime>> GetMonthlyPrayerTimeListAsync(string region, int currentMonth)
     {
-        int currentMonth = DateTime.Now.Month;
+        //int currentMonth = DateTime.Now.Month;
         var url = BASE_URL + $"monthly?region={region}&month={currentMonth}";
 
         var content = await GetContentAsync(url);
